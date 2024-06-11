@@ -842,6 +842,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         cli_enforce_required: bool | None = None,
         cli_use_class_docs_for_groups: bool | None = None,
         cli_prefix: str | None = None,
+        cli_use_nargs: bool = False,
         case_sensitive: bool | None = True,
         root_parser: Any = None,
         parse_args_method: Callable[..., Any] | None = ArgumentParser.parse_args,
@@ -880,6 +881,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             if cli_prefix.startswith('.') or cli_prefix.endswith('.') or not cli_prefix.replace('.', '').isidentifier():  # type: ignore
                 raise SettingsError(f'CLI settings source prefix is invalid: {cli_prefix}')
             self.cli_prefix += '.'
+        self.cli_use_nargs = cli_use_nargs
 
         case_sensitive = case_sensitive if case_sensitive is not None else True
         if not case_sensitive and root_parser is not None:
@@ -907,6 +909,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             add_parser_method=add_parser_method,
             add_subparsers_method=add_subparsers_method,
             formatter_class=formatter_class,
+            use_nargs=self.cli_use_nargs,
         )
 
         if cli_parse_args not in (None, False):
@@ -1223,6 +1226,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         add_parser_method: Callable[..., Any] | None = _SubParsersAction.add_parser,
         add_subparsers_method: Callable[..., Any] | None = ArgumentParser.add_subparsers,
         formatter_class: Any = HelpFormatter,
+        use_nargs: bool = False,
     ) -> None:
         self._root_parser = root_parser
         self._parse_args = self._connect_parser_method(parse_args_method, 'parsed_args_method')
@@ -1240,6 +1244,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
             arg_prefix=self.env_prefix,
             subcommand_prefix=self.env_prefix,
             group=None,
+            use_nargs=use_nargs,
         )
 
     def _add_parser_args(
@@ -1250,6 +1255,7 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
         arg_prefix: str,
         subcommand_prefix: str,
         group: Any,
+        use_nargs: bool = False,
     ) -> ArgumentParser:
         subparsers: Any = None
         for field_name, resolved_name, field_info in self._sort_arg_fields(model):
@@ -1294,7 +1300,10 @@ class CliSettingsSource(EnvSettingsSource, Generic[T]):
                 if _annotation_contains_types(
                     field_info.annotation, (list, set, dict, Sequence, Mapping), is_strip_annotated=True
                 ):
-                    kwargs['action'] = 'append'
+                    if use_nargs:
+                        kwargs['nargs'] = '*'
+                    else:
+                        kwargs['action'] = 'append'
                     if _annotation_contains_types(field_info.annotation, (dict, Mapping), is_strip_annotated=True):
                         self._cli_dict_args[kwargs['dest']] = field_info.annotation
 
